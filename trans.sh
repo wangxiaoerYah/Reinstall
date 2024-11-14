@@ -1330,8 +1330,8 @@ install_nixos() {
     }
 
     # 挂载分区，创建 swapfile
-    mount_part_basic_layout /os /os/efi
-    create_swap $swap_size /os/swapfile
+    mount_part_basic_layout /os/efi /os 
+    # create_swap $swap_size /os/swapfile
 
     # 步骤
     # 1. 安装 nix (nix-xxx)
@@ -1898,7 +1898,7 @@ create_part() {
     info "Create Part"
 
     # 分区工具
-    apk add parted e2fsprogs
+    apk add parted e2fsprogs btrfs-progs
     if is_efi; then
         apk add dosfstools
     fi
@@ -2002,6 +2002,7 @@ create_part() {
             mkfs.ext4 -F -L installer /dev/$xda*2 #2 installer
         fi
     elif [ "$distro" = alpine ] || [ "$distro" = arch ] || [ "$distro" = gentoo ] || [ "$distro" = nixos ]; then
+        modprobe btrfs
         # alpine 本身关闭了 64bit ext4
         # https://gitlab.alpinelinux.org/alpine/alpine-conf/-/blob/3.18.1/setup-disk.in?ref_type=tags#L908
         # 而且 alpine 的 extlinux 不兼容 64bit ext4
@@ -2010,33 +2011,39 @@ create_part() {
             # efi
             parted /dev/$xda -s -- \
                 mklabel gpt \
-                mkpart '" "' fat32 1MiB 101MiB \
-                mkpart '" "' ext4 101MiB 100% \
+                mkpart '" "' fat32 1MiB 257MiB \
+                mkpart '" "' linux-swap 257MiB 1281MiB \
+                mkpart '" "' btrfs 1281MiB 100% \
                 set 1 boot on
             update_part
 
-            mkfs.fat /dev/$xda*1                #1 efi
-            mkfs.ext4 -F $ext4_opts /dev/$xda*2 #2 os
+            mkfs.fat -F32 /dev/$xda*1                #1 efi
+            mkswap /dev/$xda*2                       #2 swap
+            mkfs.btrfs -L OS -n 32K /dev/$xda*3           #3 os
         elif is_xda_gt_2t; then
             # bios > 2t
             parted /dev/$xda -s -- \
                 mklabel gpt \
                 mkpart '" "' ext4 1MiB 2MiB \
-                mkpart '" "' ext4 2MiB 100% \
+                mkpart '" "' linux-swap 2MiB 1026MiB \
+                mkpart '" "' btrfs 1026MiB 100% \
                 set 1 bios_grub on
             update_part
 
             echo                                #1 bios_boot
-            mkfs.ext4 -F $ext4_opts /dev/$xda*2 #2 os
+            mkswap /dev/$xda*2                   #2 swap
+            mkfs.btrfs -L OS -n 32K /dev/$xda*3       #3 os
         else
             # bios
             parted /dev/$xda -s -- \
                 mklabel msdos \
-                mkpart primary ext4 1MiB 100% \
+                mkpart primary linux-swap 1MiB 1025MiB \
+                mkpart primary btrfs 1025MiB 100% \
                 set 1 boot on
             update_part
-
-            mkfs.ext4 -F $ext4_opts /dev/$xda*1 #1 os
+            
+            mkfs.swap /dev/$xda*1                  #1 swap
+            mkfs.btrfs -L OS -n 32K /dev/$xda*2       #2 os
         fi
     else
         # 安装红帽系或ubuntu
@@ -3841,24 +3848,37 @@ resize_after_install_cloud_image() {
 }
 
 mount_part_basic_layout() {
-    os_dir=$1
-    efi_dir=$2
+    efi_dir=$1
+    os_dir=$2
 
     if is_efi || is_xda_gt_2t; then
-        os_part_num=2
+        swap_part_num=2
     else
-        os_part_num=1
+        swap_part_num=1
+    fi
+
+    if is_efi || is_xda_gt_2t; then
+        os_part_num=3
+    else
+        os_part_num=2
     fi
 
     # 挂载系统分区
     mkdir -p $os_dir
-    mount -t ext4 /dev/${xda}*${os_part_num} $os_dir
+    mount -t btrfs /dev/${xda}*${os_part_num} $os_dir
 
     # 挂载 efi 分区
     if is_efi; then
         mkdir -p $efi_dir
         mount -t vfat -o umask=077 /dev/${xda}*1 $efi_dir
     fi
+
+    # 挂载 swap 分区
+    if [ -e /dev/${xda}*${swap_part_num} ]; then
+        mkswap /dev/${xda}*${swap_part_num}
+        swapon /dev/${xda}*${swap_part_num}
+    fi
+    
 }
 
 mount_part_for_iso_installer() {
