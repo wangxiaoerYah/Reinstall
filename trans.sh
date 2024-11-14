@@ -2018,7 +2018,7 @@ create_part() {
             update_part
 
             mkfs.fat -F32 /dev/$xda*1                #1 efi
-            mkswap /dev/$xda*2                       #2 swap
+            # mkswap /dev/$xda*2                       #2 swap
             mkfs.btrfs -L OS -n 32K /dev/$xda*3           #3 os
         elif is_xda_gt_2t; then
             # bios > 2t
@@ -2031,7 +2031,7 @@ create_part() {
             update_part
 
             echo                                #1 bios_boot
-            mkswap /dev/$xda*2                   #2 swap
+            # mkswap /dev/$xda*2                   #2 swap
             mkfs.btrfs -L OS -n 32K /dev/$xda*3       #3 os
         else
             # bios
@@ -2042,7 +2042,7 @@ create_part() {
                 set 1 boot on
             update_part
             
-            mkswap /dev/$xda*1                  #1 swap
+            # mkswap /dev/$xda*1                  #1 swap
             mkfs.btrfs -L OS -n 32K /dev/$xda*2       #2 os
         fi
     else
