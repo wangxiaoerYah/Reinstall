@@ -2042,7 +2042,7 @@ create_part() {
                 set 1 boot on
             update_part
             
-            mkfs.swap /dev/$xda*1                  #1 swap
+            mkswap /dev/$xda*1                  #1 swap
             mkfs.btrfs -L OS -n 32K /dev/$xda*2       #2 os
         fi
     else
